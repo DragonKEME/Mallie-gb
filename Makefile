@@ -1,0 +1,21 @@
+PROGRAMNAME=mallie
+
+ASSEMBLY=rgbasm
+ASMOPTION=-L -H
+
+LINKER=rgblink
+
+FIXER=rgbfix
+FIXPADDING=0xFF
+FIXOPTION=-v -p $(FIXPADDING)
+
+all: asm link fix
+
+asm:
+	$(ASSEMBLY) $(ASMOPTION) -o $(PROGRAMNAME).o $(PROGRAMNAME).asm
+
+link:
+	$(LINKER) -o $(PROGRAMNAME).gb $(PROGRAMNAME).o
+
+fix:
+	$(FIXER) $(FIXOPTION) $(PROGRAMNAME).gb
