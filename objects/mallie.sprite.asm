@@ -2,7 +2,7 @@
 
 MallieSprites:
 
-MallieSpritesFace: ;================ FACE ===============
+MallieSpriteFace: ;================ FACE ===============
     MallieFaceHeadLeft:
         dw `00033333
         dw `00322222
@@ -83,7 +83,7 @@ MallieSpritesFace: ;================ FACE ===============
         dw `03330000
         dw `00000000
 
-MallieSpritesSide: ;===================== SIDE ===============
+MallieSpriteSide: ;===================== SIDE ===============
     MallieSideHeadLeft:
         dw `00033333
         dw `00333333
@@ -164,7 +164,7 @@ MallieSpritesSide: ;===================== SIDE ===============
         dw `32213000
         dw `33333000
 
-MallieSpritesBack: ;===================== Back ===============
+MallieSpriteBack: ;===================== Back ===============
     MallieBackHeadLeft:
         dw `00033333
         dw `00333333

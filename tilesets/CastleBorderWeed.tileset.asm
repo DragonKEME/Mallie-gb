@@ -30,15 +30,15 @@ CastleBorderWeedTileset:
 
 ; Castle
     db  0                               ; Bank
-    dw  CastleSprite                    ; Start Address
-    dw  EndCastleSprite - CastleSprite  ; Size
+    dw  CastleTiles                    ; Start Address
+    dw  EndCastleTiles - CastleTiles  ; Size
 
 ; Border
     db  0   ; Bank
-    dw  BorderSprite
-    dw  EndBorderSprite - BorderSprite
+    dw  BorderTiles
+    dw  EndBorderTiles - BorderTiles
 
 ; Weed
     db  0   ; Bank
-    dw  WeedSprite
-    dw  EndWeedSprite - WeedSprite
+    dw  WeedTiles
+    dw  EndWeedTiles - WeedTiles

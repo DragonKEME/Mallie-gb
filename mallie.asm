@@ -543,15 +543,15 @@ section "Mallie", rom0
 
 
 section "weedSprite", rom0
-    include "sprites/weed.sprite.asm"
+    include "tiles/weed.tiles.asm"
 
 
 section "castleSprite", rom0
-    include "sprites/Castle.sprite.asm"
+    include "tiles/Castle.tiles.asm"
 
 
 section "borderSprite", rom0
-    include "sprites/Border.sprite.asm"
+    include "tiles/Border.tiles.asm"
 
 section "tilesetsManagment", rom0
     include "tilesets.asm"

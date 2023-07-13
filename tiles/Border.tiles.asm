@@ -1,6 +1,6 @@
 ; Total : 8 tiles
 
-BorderSprite:
+BorderTiles:
 
 BorderTop: ; (1 tile)
     dw `00000000
@@ -85,4 +85,4 @@ BorderAngle: ; (4 tile)
 
 
 ; End
-EndBorderSprite:
+EndBorderTiles:

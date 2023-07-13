@@ -1,6 +1,6 @@
 ; Total : 22 tiles
 
-CastleSprite:
+CastleTiles:
 
 CastleFaceWall_Standard: ; (1 tile)
     dw `00000000
@@ -229,4 +229,4 @@ CastleDoorUpper: ; (2 tile) Lower is the angle_bottom_lower inverted, right (ec 
         dw `03033333
 
 ; End
-EndCastleSprite:
+EndCastleTiles:

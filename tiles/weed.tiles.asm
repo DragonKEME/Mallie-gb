@@ -1,7 +1,7 @@
 ;  Weed sprite
 ; Total : 2 tiles
 
-WeedSprite:
+WeedTiles:
 
 WhiteGrass: ; (1 tile)
     dw `11111111
@@ -23,4 +23,4 @@ GrayGrass: ; (1 tile)
     dw `22122222
     dw `21222222
 
-EndWeedSprite:
+EndWeedTiles:
