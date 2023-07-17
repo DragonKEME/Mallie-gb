@@ -28,6 +28,12 @@ TilesLocation:
 CastleBorderWeedTileset:
     db  3           ; Size
 
+
+; Weed
+    db  0   ; Bank
+    dw  WeedTiles
+    dw  EndWeedTiles - WeedTiles
+
 ; Castle
     db  0                               ; Bank
     dw  CastleTiles                    ; Start Address
@@ -38,7 +44,3 @@ CastleBorderWeedTileset:
     dw  BorderTiles
     dw  EndBorderTiles - BorderTiles
 
-; Weed
-    db  0   ; Bank
-    dw  WeedTiles
-    dw  EndWeedTiles - WeedTiles

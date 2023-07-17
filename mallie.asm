@@ -11,7 +11,11 @@ DEF persoDirectionVramSize = 128
 DEF persoIndexVramSize = 24
 ; Size of a perso direction in Tile in Vram
 DEF persoIndexDirectionVramSize = 8
+; ================================================ Interrupt =================================================
 
+section "Vblank", ROM0[$40]
+call Vblank
+reti
 
 SECTION "Header", ROM0[$100]
     nop
@@ -37,6 +41,7 @@ section "Memory", wram0 ; ======================== RAM =========================
     0 -> Static,
     1 -> Mov1,
     2 -> Mov2,
+    3 -> Static2 (Special static indicate next mov is 2)
 
 - Vram index (1 bytes): index of personage tiles in vram (1st perso: 0, 2nd: 1, 3th: 2...)
 
@@ -57,13 +62,25 @@ section "Memory", wram0 ; ======================== RAM =========================
 
 
 */
-DEF POMS_Size = 7
+DEF POMS_Size = 8
+DEF MAX_POSM_IN_OAM = 10
+
+; POSM array to draw (2 * 10 POSM)
+; This array get by Vblank and draw every Posm found in it.
+; Set pointer 0 at end of array
+POSM_DrawingArray: ds 2*MAX_POSM_IN_OAM
 
 ; POSM of Mallie
 POSM_Mallie: ds POMS_Size
 
-;test
-POSM_Mallie_test: ds POMS_Size
+; Mallie Walk advance
+MallieCounterWalkAdvance: db
+DEF MALLIE_MAX_COUNTER_ADVANCE = 16 ; 16 / pixel per advance
+
+; Mallie counter vblank whitout move
+MallieCounterVblankVoid: db
+; Mallie number of VBlanc void (define mallie's speed)
+DEF MALLIE_VBLANK_VOID_MAX = 1
 
 ; OAM Stack
 ; Number of OAM object used
@@ -74,8 +91,14 @@ _DrawPersonnageObjectOAM_RAM_POSMDirection: db
 
 _TilesetToVram_RAM_TilesetNumberElement: db
 
+; Update Keys
+wNewKeys: db
+wCurKeys: db
+
+    
 section "mainProgramm", ROM0 ; =================== Start program ===============================================
 startSection:
+    di  ; turn off interruption
     ; Turn off audio circuit
     xor a
     ld [rNR52], a
@@ -130,6 +153,22 @@ StartClearOAM:
     ld [hli], a     ; 1st byte attribute pointer
     ld [hl], e      ; 2nd byte attribute pointer
 
+    xor a
+    ld [MallieCounterWalkAdvance], a ; Reset walk counter to 0
+    ld [MallieCounterVblankVoid], a   ; Reset Vblank void mallie
+
+    ld hl, POSM_DrawingArray    ; Get POSM array
+    ld de, POSM_Mallie
+
+    ld a, e
+    ld [hli], a
+    ld a, d
+    ld [hli], a     ; [hl] -> POSM_DrawingArray[0] = *POSM_Mallie
+
+    xor a
+    ld [hli], a
+    ld [hli], a     ; [hl] -> POSM_DrawingArray[0] = NULL
+
 
     ld hl, POSM_Mallie
     call DrawPersonnageObjectOAM
@@ -152,12 +191,213 @@ StartClearOAM:
     ld a, LCDCF_ON| LCDCF_BG8000 | LCDCF_OBJON | LCDCF_BGON ; %10010011
     ld [rLCDC], a
 
-
-loop:
     xor a
-    halt
-    jp loop
+    ld  [rIF], a    ; reset interupt flag
 
+    ld a, IEF_VBLANK
+	ld [rIE], a     ; Set Vblank call
+	
+	ei
+
+
+mainLoop:
+    ; Mallie walk
+    ld a, [MallieCounterVblankVoid]
+    cp 0
+    jp nz, _MainLoop_no_update_sprite
+
+    ld a, [MallieCounterWalkAdvance]
+    cp 0
+    call z, UpdateKeys
+
+    ld a, [wCurKeys]
+    ld hl, POSM_Mallie
+
+    ld d, a     ; d = a (wCurKeys)
+
+    inc hl  ; [hl] -> POSM_Mallie y
+    inc hl  ; [hl] -> POSM Direction
+
+_MainLoop_CheckLeft:
+    and PADF_LEFT
+    jp z, _MainLoop_CheckRight
+
+_MainLoop_Left:
+    ; Decrement screen x 
+    ld a,[rSCX]
+    dec a
+    ld [rSCX], a
+    ;Mallie POSM is fix just screen move
+
+    ld [hl], 3  ; POSM left direction
+    jp _MainLoop_DefWalkstate
+
+_MainLoop_CheckRight:
+    ld a, d
+    and PADF_RIGHT
+    jp z, _MainLoop_CheckUp
+
+_MainLoop_Right:
+    ; Increment screen x
+    ld a,[rSCX]
+    inc a
+    ld [rSCX], a
+    ;Mallie POSM is fix just screen move
+
+    ld [hl], 1  ; POSM right direction
+    jp _MainLoop_DefWalkstate
+
+_MainLoop_CheckUp:
+    ld a, d
+    and PADF_UP
+    jp z, _MainLoop_CheckDown
+
+_MainLoop_Up:
+    ; Decrement screen y
+    ld a,[rSCY]
+    dec a
+    ld [rSCY], a
+    ;Mallie POSM is fix just screen move
+
+    ld [hl], 2  ; POSM back direction
+    jp _MainLoop_DefWalkstate
+
+_MainLoop_CheckDown:
+    ld a, d
+    and PADF_DOWN
+    jp z, _MainLoop_no_mallie_movement_input
+
+_MainLoop_Down:
+    ; Increment screen y
+    ld a,[rSCY]
+    inc a
+    ld [rSCY], a
+    ;Mallie POSM is fix just screen move
+
+    ld [hl], 0  ; POSM face direction
+
+_MainLoop_DefWalkstate:
+
+    ; Begin Definition of Walkstate
+    inc hl      ; [hl] -> POSM Walkstate
+
+    ; if (mallieCounterWalkAdvance (CWA) == 0)
+    ld a, [MallieCounterWalkAdvance]
+    ld c, a     ; keep counter in c
+    cp 0
+    jp nz, _MainLoop_DefWalkstate_CheckCWA_4
+    
+        ; if (Walkstate != 2)
+        ld a, [hl]
+        cp 2
+        jp z, _MainLoop_DefWalkstate_CWA_0_WalkstateElse
+            ld [hl], 3      ; if walkstate is not already on M2 (Movement 2) walkstate and button keep pressed after new read: put this special static walkstate indicate the next walkstate is M2
+            jp _MainLoop_DefWalkstate_Finally   ; finally goto inc CWA
+
+        _MainLoop_DefWalkstate_CWA_0_WalkstateElse:
+            ld [hl], 0     ; else walk already on M2 walkstate put in static walkstate, indicate the next walkstate is M1
+            jp _MainLoop_DefWalkstate_Finally   ; finally goto inc CWA
+
+
+_MainLoop_DefWalkstate_CheckCWA_4:
+    ; else if (CWA == 4)
+    cp 4
+    jp nz, _MainLoop_DefWalkstate_Finally
+        ; if (walkstate == 3)
+        ld a, [hl]
+        cp 3
+        jp nz, _MainLoop_DefWalkstate_CWA_4_WalkstateElse
+            ld [hl], 2      ; if Walkstate is in special static put M2 
+            jp _MainLoop_DefWalkstate_Finally
+
+        _MainLoop_DefWalkstate_CWA_4_WalkstateElse:
+            ld [hl], 1      ; else put M1
+
+_MainLoop_DefWalkstate_Finally:
+    inc c
+    ld a, c
+    cp MALLIE_MAX_COUNTER_ADVANCE
+    jp nz, _MainLoop_NoReset_MallieCounterAdvance
+        xor a
+_MainLoop_NoReset_MallieCounterAdvance:
+    ld [MallieCounterWalkAdvance], a    ; inc Mallie counter
+
+_MainLoop_no_update_sprite:             ; inc Vblank void in each case (sauf no input)
+    ld a, [MallieCounterVblankVoid]
+    inc a
+    cp MALLIE_VBLANK_VOID_MAX
+    jp nz, _MainLoop_NoReset_MallieVblankVoid
+        xor a
+_MainLoop_NoReset_MallieVblankVoid:
+    ld [MallieCounterVblankVoid], a
+    jp _MainLoop_end_mallie_movement    
+
+_MainLoop_no_mallie_movement_input:
+    ; here [hl] -> POSM direction
+    inc hl  ; [hl] -> POSM walkstate
+    ld [hl], 0      ; no walking reset static
+
+_MainLoop_end_mallie_movement:
+    
+
+    halt
+    jp mainLoop
+
+
+Vblank:  ;======================================== Vblank interupt ===========================================
+    ; store each register
+    push af
+    push bc
+    push de
+    push hl
+
+    ld hl, POSM_DrawingArray
+
+    ld a, [hli]
+    ld e, a         ; LSB 1er POSM
+    ld a, [hli]
+    ld d, a         ; MSB 2nd POSM
+
+    ; POSM_DrawingArray[0] = NULL no POSM to show
+    or e
+    jp z, _Vblank_POSMDRAW_end
+
+    ld c, 0
+    
+
+_Vblank_POSMDRAW:
+    push bc     ; keep counter protect
+    push hl     ; Store POSM array
+    ld h, d
+    ld l, e    ; HL = DE (POSM address)
+
+    call DrawPersonnageObjectOAM
+    
+    pop hl      ; restore POSM array
+    pop bc      ; restore counter
+
+    ld a, [hli]
+    ld e, a         ; LSB POSM
+    ld a, [hli]
+    ld d, a         ; MSB POSM
+
+    ; POSM_DrawingArray[n] = NULL -> no more POSM to draw
+    or e
+    jp z, _Vblank_POSMDRAW_end
+
+    ; check don't up to MAX POSM capable OAM
+    ld a, c
+    cp MAX_POSM_IN_OAM
+    jp nz, _Vblank_POSMDRAW
+
+_Vblank_POSMDRAW_end:
+
+    ; restore register
+    pop hl
+    pop de
+    pop bc
+    pop af
+    ret
 
 
 section "function", rom0 ;======================== Function ====================================================
@@ -319,6 +559,14 @@ _DrawPersonnageObjectOAM_DecD1_End:
     ld [hl], d
     inc l
     inc l
+
+    ; check is up 3
+    ld a, e
+    cp 3
+    jp nz, _DrawPersonnageObjectOAM_AddWalkstate
+    ld e, 0
+
+_DrawPersonnageObjectOAM_AddWalkstate:
 
     ld a, d
     inc a       ; 1st Static Tile
@@ -536,6 +784,47 @@ _TilesetToVram_LoopTileset_end:
 _TilesetToVram_End:
     ret
 
+
+; Fonctiun read Keys input, from gbdev tutorial
+; https://gbdev.io/gb-asm-tutorial/part2/input.html
+; @return: wNewKeys (RAM) New pressed Keys
+; @return: wCurKeys (RAM) Current pressed key
+UpdateKeys:
+    ; Poll half the controller
+    ld a, P1F_GET_BTN
+    call .onenibble
+    ld b, a ; B7-4 = 1; B3-0 = unpressed buttons
+  
+    ; Poll the other half
+    ld a, P1F_GET_DPAD
+    call .onenibble
+    swap a ; A3-0 = unpressed directions; A7-4 = 1
+    xor a, b ; A = pressed buttons + directions
+    ld b, a ; B = pressed buttons + directions
+  
+    ; And release the controller
+    ld a, P1F_GET_NONE
+    ldh [rP1], a
+  
+    ; Combine with previous wCurKeys to make wNewKeys
+    ld a, [wCurKeys]
+    xor a, b ; A = keys that changed state
+    and a, b ; A = keys that changed to pressed
+    ld [wNewKeys], a
+    ld a, b
+    ld [wCurKeys], a
+    ret
+  
+  .onenibble
+    ldh [rP1], a ; switch the key matrix
+    call .knownret ; burn 10 cycles calling a known ret
+    ldh a, [rP1] ; ignore value while waiting for the key matrix to settle
+    ldh a, [rP1]
+    ldh a, [rP1] ; this read counts
+    or a, $F0 ; A7-4 = 1; A3-0 = unpressed keys
+  .knownret
+    ret
+  
 
 section "Mallie", rom0
     include "objects/mallie.sprite.asm"
