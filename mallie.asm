@@ -115,17 +115,13 @@ startSection:
     ld bc, EndMallieSprites - MallieSprites
     call MemCopy
 
-    ld bc, 1
-    call TilesetToVram
-
-    ; Make tileMap (half white weed/ half grey weed)
-    ld d, $00       ; Pos on tileset of first tile
-    ld hl, _SCRN0
-    ld bc, 512
-    call MemClone
-    ld d, $01       ; Pos on tileset of second tile
-    ld bc, 512
-    call MemClone
+    ; init background with map
+    ld de, StartCastleMap       ; map address
+    xor a                       ; map bank
+    ld c, 0                    ; x first mapel
+    ld b, 0                    ; y first mapel
+    ld l, a                     ; offset (no offset)
+    call MapEngine_init
 
     ; Clear OAM
     xor a
@@ -200,7 +196,7 @@ StartClearOAM:
 	ei
 
 
-mainLoop:
+mainLoop: ;================================= Main loop ===========================
     ; Mallie walk
     ld a, [MallieCounterVblankVoid]
     cp 0
@@ -300,8 +296,8 @@ _MainLoop_DefWalkstate:
 
 
 _MainLoop_DefWalkstate_CheckCWA_4:
-    ; else if (CWA == 4)
-    cp 4
+    ; else if (CWA == 8)
+    cp 8
     jp nz, _MainLoop_DefWalkstate_Finally
         ; if (walkstate == 3)
         ld a, [hl]
@@ -701,37 +697,8 @@ _FindOAMObject_ReturnError:
     ret
 
 ; Set tileset in vram with tileset number
-; @params: bc tileset Number
-; Improve possible: Set hl directly on good Address (cause in fact we already know the address)
+; @params: [hl] -> tileset address
 TilesetToVram:
-    ld hl, TilesSets
-
-    ; parcour tileset array
-    ld a, b
-    or c
-    jp z, _TilesetToVram_LoopTilesetArray_end
-
-    ld d, 0
-    ld e, TilesetDescriptor_Size    ; de = TilesetDescriptor_Size
-
-_TilesetToVram_LoopTilesetArray:
-    add hl, de
-    dec bc
-    ld a, b
-    or c
-    jp nz, _TilesetToVram_LoopTilesetArray
-
-_TilesetToVram_LoopTilesetArray_end:
-
-    ld a, [hli] ; Bank number
-    ld e, [hl] ; LSB tileset address
-    inc hl
-    ld d, [hl] ; MSB tileset address
-
-    ; TODO: CHECK AND SET BANK NUMBER 
-    
-    ld h, d
-    ld l, e   ; HL = DE (tileset address)
     
     ld a, [hli] ; Number element of tileset
     ld [_TilesetToVram_RAM_TilesetNumberElement], a
@@ -825,28 +792,42 @@ UpdateKeys:
   .knownret
     ret
   
+; Engine
+section "engine", rom0
+    include "maps.engine.asm"
 
+; Object
 section "Mallie", rom0
     include "objects/mallie.sprite.asm"
     include "objects/mallie.attribute.asm"
 
 
-section "weedSprite", rom0
+; Tiles
+section "weedTiles", rom0
     include "tiles/weed.tiles.asm"
 
-
-section "castleSprite", rom0
+section "castleTiles", rom0
     include "tiles/Castle.tiles.asm"
 
+section "unicolorTile", rom0
+    include "tiles/unicolor.tiles.asm"
 
-section "borderSprite", rom0
+section "borderTiles", rom0
     include "tiles/Border.tiles.asm"
 
-section "tilesetsManagment", rom0
-    include "tilesets.asm"
 
+; Tilesets
 section "tileset.CastleBorder", rom0
     include "tilesets/CastleBorder.tileset.asm"
 
 section "tilset.CastleBorderWeed", rom0
     include "tilesets/CastleBorderWeed.tileset.asm"
+
+
+; Mapels
+section "mapels.StartCastle", rom0
+    include "mapels/castleBorder.mapels.asm"
+
+; Maps
+section "maps.StartCastle", rom0
+    include "maps/StartCastle/startCastle.maps.asm"

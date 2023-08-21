@@ -26,8 +26,12 @@ TilesLocation:
 
 
 CastleBorderWeedTileset:
-    db  3           ; Size
+    db  4           ; Size
 
+; empty Tile
+    db  0
+    dw  UniZeroTile
+    dw  EndUniZeroTile - UniZeroTile
 
 ; Weed
     db  0   ; Bank

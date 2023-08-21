@@ -26,11 +26,16 @@ TilesLocation:
 
 
 CastleBorderTileset:
-    db  2           ; Size
+    db  3           ; Size
+
+; empty Tile
+    db  0
+    dw  UniZeroTile
+    dw  EndUniZeroTile - UniZeroTile
 
 ; Castle
-    db  0                               ; Bank
-    dw  CastleTiles                    ; Start Address
+    db  0                             ; Bank
+    dw  CastleTiles                   ; Start Address
     dw  EndCastleTiles - CastleTiles  ; Size
 
 ; Border

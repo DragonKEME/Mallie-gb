@@ -1,4 +1,4 @@
-; Array Contening tileset
+; Array Contening maps
 
 /*
 TabMaps: (3xN bytes)
