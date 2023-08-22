@@ -26,7 +26,7 @@ Maps storage:
     - First Mapel show address: pointer on the first showed tileset (top left) in the Map array
         Each next mapel can be found with manipulation of this pointer
 
-    - Offset Map: Offset on screen for the First show mapel.
+    - Offset Map: Offset on screen for the First show mapel. -> bit 7-4: y offset, bit 3-0: x offset
         /!\ everything before offset is draw with padding mapel
 
     - Padding Line: bollean (0 -> False, everything else -> true) 
@@ -55,6 +55,8 @@ Maps storage:
     +                                        + |
     |                  Map                   | /
     +----------------------------------------+
+    | Counter offset X  |  Counter offset Y  |
+    +-------------------+--------------------+
 
 */
 MapEngine_Ram_MapInfo:
@@ -84,6 +86,11 @@ MapEngine_Ram_MapInfo:
     MapEngine_Ram_VirtualMapIndex: db
     MapEngine_Ram_VirtualFlagsMap: ds SCRN_SX_MAPEL*SCRN_SY_MAPEL
 
+MapEngine_Function_variable:
+    ; LoadScreenMap
+    ; Counter Offset(X/Y): using to count n to 0 the X decalage during drawing Map
+    MapEngine_Ram_CounterOffsetX: db
+    MapEngine_Ram_CounterOffsetY: db
 
 
 section "MapsEngine", rom0
@@ -95,7 +102,7 @@ Must called in vblank or screen off
 @params: a -> maps bank
 @params: c -> init x position (top left mapel on screen)
 @params: b -> init y position (top left mapel on screen)
-@params: l -> offsets (bit 7-4: x offset, bit 3-0: y offset)
+@params: l -> offsets (bit 7-4: y offset, bit 3-0: x offset)
 */
 MapEngine_init:
     push bc         ; Store init position (sp - 2)
@@ -218,6 +225,33 @@ MapEngine_LoadScreenMap:
     ; init index vmap
     ld [MapEngine_Ram_VirtualMapIndex], a
 
+    xor a
+    ld [MapEngine_Ram_CounterOffsetX], a ; reset X offset counter
+    ld [MapEngine_Ram_CounterOffsetY], a ; reset Y offset counter
+
+
+    ; load the offset counter
+    ld a, [MapEngine_Ram_MapOffset]
+    ld b, a 
+    ; Y counter
+    and %11110000
+    jp z, MapEngine_LoadScreenMap_offsetY_end
+    swap a
+    ld [MapEngine_Ram_CounterOffsetY], a    ; store y offset
+    ld de, MapEngine_Ram_Padding_Mapel      ; de = padding mapel
+    ld [MapEngine_Ram_Padding_Line], a      ; padding line = true
+    jp MapEngine_LoadScreenMap_offsetX_end  ; skip X offset
+MapEngine_LoadScreenMap_offsetY_end:
+         
+    ; X counter
+    ld a, b                                 ; a = MapEngine_Ram_MapOffset
+    and %00001111
+    jp z, MapEngine_LoadScreenMap_offsetX_end
+    push de
+    ld de, MapEngine_Ram_Padding_Mapel      ; load padding mappel
+    ld [MapEngine_Ram_CounterOffsetX], a    ; -> store 3-0 bits offset (x offset)
+MapEngine_LoadScreenMap_offsetX_end:
+
     ld hl, _SCRN0
     ld a, SCRN_SX_MAPEL       ; number mapel in one line
     ld b, a         ; b = SCRN_SX_MAPEL (10) -> x counter
@@ -250,7 +284,27 @@ MapEngine_LoadScreenMap_Loop:
     jp z, MapEngine_LoadScreenMap_Loop_decY ; if x = 0 dec y
 
     push bc     ; resave it
+
+    ; if paddind line == 1 (true) do nothing
+    ld a, [MapEngine_Ram_Padding_Line]
+    cp 0
+    jp nz, MapEngine_LoadScreenMap_Loop_exceedMapX_end   ; if padding line == true skip test
+
+    ; if x offset > 0 -> padding
+    ld a, [MapEngine_Ram_CounterOffsetX]
+    cp 0
+    jp z, MapEngine_LoadScreenMap_Loop_exceedMapX_if
+    dec a                                               ; counterX --
+    ld [MapEngine_Ram_CounterOffsetX], a                ; store
+    cp 0
+    jp nz, MapEngine_LoadScreenMap_Loop_exceedMapX      ; counter > 0 -> padding
+    pop bc
+    pop de                                              ; restore de after padding
+    push bc
+    jp MapEngine_LoadScreenMap_Loop_exceedMapX_end
     
+    
+MapEngine_LoadScreenMap_Loop_exceedMapX_if:
     ; if (current + b < Max X -1)
     ld a, [MapEngine_Ram_Current_x]
     add a, SCRN_SX_MAPEL
@@ -261,15 +315,13 @@ MapEngine_LoadScreenMap_Loop:
     cp b
     jp nc, MapEngine_LoadScreenMap_Loop_exceedMapX_else
 
+MapEngine_LoadScreenMap_Loop_exceedMapX:
     ; if exceed mapel = padding
     ld de, MapEngine_Ram_Padding_Mapel ; [de] -> padding mapel
     jp MapEngine_LoadScreenMap_Loop_exceedMapX_end
 
 MapEngine_LoadScreenMap_Loop_exceedMapX_else:
-    ; else inc de if paddind line == 0 (false)
-    ld a, [MapEngine_Ram_Padding_Line]
-    cp 0
-    jp nz, MapEngine_LoadScreenMap_Loop_exceedMapX_end   ; if padding line == true ignore inc de
+    ; else inc de
     inc de
 
 MapEngine_LoadScreenMap_Loop_exceedMapX_end:
@@ -286,7 +338,16 @@ MapEngine_LoadScreenMap_Loop_decY:
     ld b, a         ; b = 10 -> x counter
 
     push bc
-    
+
+    ld a, [MapEngine_Ram_CounterOffsetY]
+    cp 0
+    jp z, MapEngine_LoadScreenMap_Loop_exceedMapY_if
+    dec a                                               ; counterY --
+    ld [MapEngine_Ram_CounterOffsetY], a                ; store
+    cp 0
+    jp nz, MapEngine_LoadScreenMap_Loop_exceedMapY      ; counter > 0 -> padding
+
+MapEngine_LoadScreenMap_Loop_exceedMapY_if:  
     ; if (currentY + c < Max Y - 1)
     ld a, [MapEngine_Ram_Current_y]
     add a, SCRN_SY_MAPEL
@@ -296,7 +357,8 @@ MapEngine_LoadScreenMap_Loop_decY:
     dec a
     cp c
     jp nc, MapEngine_LoadScreenMap_Loop_exceedMapY_else
-   
+
+MapEngine_LoadScreenMap_Loop_exceedMapY:  
     ; if exceed mapel = padding line
     ld de, MapEngine_Ram_Padding_Mapel
     inc a                               ; a > 0
@@ -310,7 +372,7 @@ MapEngine_LoadScreenMap_Loop_exceedMapY_else:
 
     push hl     ; store vram position
 
-    ; de -> MapEngine_Ram_FirstShowMapel_Address + deltaY * sizeX
+    ; de -> MapEngine_Ram_FirstShowMapel_Address + (deltaY - offset) * sizeX 
     ld a, [MapEngine_Ram_FirstShowMapel_Address]
     ld l, a
     ld a, [MapEngine_Ram_FirstShowMapel_Address + 1] 
@@ -319,12 +381,23 @@ MapEngine_LoadScreenMap_Loop_exceedMapY_else:
     ld d, 0
     ld a, [MapEngine_Ram_Map_SizeX]
     ld e, a                     ; de = SizeX
+
+    ; offset
+    ld a, [MapEngine_Ram_MapOffset]
+    and %11110000
+    swap a
+    ld b, a                   ; b -> offset
     ld a, SCRN_SY_MAPEL       ; a -> loop counter
+    sub a, b                  ; a -> loop counter - offset
+    cp c
+    jp z, MapEngine_LoadScreenMap_Loop_exceedMapY_else_mulLoop_end
+
     MapEngine_LoadScreenMap_Loop_exceedMapY_else_mulLoop:
         add hl, de
         dec a
         cp c
         jp nz, MapEngine_LoadScreenMap_Loop_exceedMapY_else_mulLoop
+MapEngine_LoadScreenMap_Loop_exceedMapY_else_mulLoop_end:
 
     ld d, h
     ld e, l     ; de = hl
@@ -334,6 +407,20 @@ MapEngine_LoadScreenMap_Loop_exceedMapY_else:
     ; padding == false
     xor a
     ld [MapEngine_Ram_Padding_Line], a  ; padding line = false
+
+    ; load the offset counter
+    ld a, [MapEngine_Ram_MapOffset]
+    ld b, a 
+    ; X counter
+    and %00001111
+    jp z, MapEngine_LoadScreenMap_Loop_exceedMapY_else_offsetX_end
+    pop bc
+    push de
+    push bc
+    ld de, MapEngine_Ram_Padding_Mapel      ; load padding mappel
+    ld [MapEngine_Ram_CounterOffsetX], a    ; -> store 3-0 bits offset (x offset)
+MapEngine_LoadScreenMap_Loop_exceedMapY_else_offsetX_end:
+
 
 MapEngine_LoadScreenMap_Loop_exceedMapY_end:
     ; hl -> next background line

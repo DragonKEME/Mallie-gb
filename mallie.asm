@@ -118,9 +118,9 @@ startSection:
     ; init background with map
     ld de, StartCastleMap       ; map address
     xor a                       ; map bank
-    ld c, 0                    ; x first mapel
-    ld b, 0                    ; y first mapel
-    ld l, a                     ; offset (no offset)
+    ld c, a                    ; x first mapel
+    ld b, a                     ; y first mapel
+    ld l, a                   ; offset (no offset)
     call MapEngine_init
 
     ; Clear OAM
